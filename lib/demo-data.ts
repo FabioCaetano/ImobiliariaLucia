@@ -5,7 +5,8 @@ export type Property = {
   suites: number; parking: number; area: number; description: string;
   amenities: string[]; image: string; images: string[]; featured: boolean;
   furnished: boolean; pets: boolean; published: boolean; views: number;
-  createdAt: string;
+  createdAt: string; seoTitle?: string; seoDescription?: string;
+  videoUrl?: string; virtualTourUrl?: string;
 };
 
 const imgs = {

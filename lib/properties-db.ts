@@ -1,72 +1,118 @@
-import { desc, eq } from "drizzle-orm";
-import { getDb } from "../db";
-import { properties } from "../db/schema";
 import { demoProperties, type Property } from "./demo-data";
-import { ensureDatabase } from "./database";
+import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase";
 
-const encode = (p: Property) => ({
-  ...p,
-  id: undefined,
-  amenities: JSON.stringify(p.amenities),
-  images: JSON.stringify(p.images),
-});
+type PropertyRow = Record<string, unknown>;
 
-export function normalizeProperty(row: Record<string, unknown>): Property {
-  const parse = (value: unknown) => {
-    try { return JSON.parse(String(value || "[]")); } catch { return []; }
-  };
-  const legacyValues: Record<string, string> = {
-    Compra: "Buy", Aluguel: "Rent", Temporada: "Seasonal",
-    Casa: "House", Apartamento: "Apartment", Comercial: "Commercial",
-    "Disponível": "Available", Novo: "New", "Indisponível": "Unavailable", Vendido: "Sold", Alugado: "Rented",
-    "Ar-condicionado": "Air conditioning", Lareira: "Fireplace", Jardim: "Garden", Lavanderia: "Laundry",
-    Varanda: "Balcony", Piscina: "Pool", Academia: "Gym", Elevador: "Elevator", Portaria: "Concierge",
-    "Terraço": "Terrace", "Aceita animais": "Pet-friendly",
-  };
-  const demo = demoProperties.find((property) => property.code === String(row.code));
-  const legacyTitles = new Set([
-    "Casa contemporânea em High Park", "Condo com vista para o lago em Harbourfront",
-    "Loft autêntico no Distillery District", "Townhouse familiar em Leslieville",
-    "Apartamento elegante em Yorkville", "Casa ensolarada em The Beaches",
-  ]);
-  const title = String(row.title || "");
+export function normalizeProperty(row: PropertyRow): Property {
   return {
-    ...row,
-    title: demo && legacyTitles.has(title) ? demo.title : title,
-    description: demo && legacyTitles.has(title) ? demo.description : String(row.description || ""),
-    purpose: legacyValues[String(row.purpose)] || String(row.purpose || ""),
-    type: legacyValues[String(row.type)] || String(row.type || ""),
-    status: legacyValues[String(row.status)] || String(row.status || ""),
-    amenities: (parse(row.amenities) as unknown[]).map((item) => legacyValues[String(item)] || String(item)),
-    images: parse(row.images),
-  } as Property;
+    id: Number(row.id),
+    title: String(row.title || ""),
+    slug: String(row.slug || ""),
+    code: String(row.code || ""),
+    type: String(row.type || ""),
+    purpose: String(row.purpose || ""),
+    status: String(row.status || "Available"),
+    price: Number(row.price || 0),
+    city: String(row.city || "Toronto"),
+    neighborhood: String(row.neighborhood || ""),
+    address: String(row.address || ""),
+    bedrooms: Number(row.bedrooms || 0),
+    bathrooms: Number(row.bathrooms || 0),
+    suites: Number(row.suites || 0),
+    parking: Number(row.parking || 0),
+    area: Number(row.area || 0),
+    description: String(row.description || ""),
+    amenities: Array.isArray(row.amenities) ? row.amenities.map(String) : [],
+    image: String(row.image || ""),
+    images: Array.isArray(row.images) ? row.images.map(String) : [],
+    featured: Boolean(row.featured),
+    furnished: Boolean(row.furnished),
+    pets: Boolean(row.pets),
+    published: Boolean(row.published),
+    views: Number(row.views || 0),
+    seoTitle: String(row.seo_title || ""),
+    seoDescription: String(row.seo_description || ""),
+    videoUrl: String(row.video_url || ""),
+    virtualTourUrl: String(row.virtual_tour_url || ""),
+    createdAt: String(row.created_at || new Date().toISOString()),
+  };
 }
 
-export async function seedIfEmpty() {
-  await ensureDatabase();
-  const db = getDb();
-  const existing = await db.select({ id: properties.id }).from(properties).limit(1);
-  if (!existing.length) {
-    for (const property of demoProperties) await db.insert(properties).values(encode(property));
+export function propertyToRow(property: Partial<Property>) {
+  return {
+    title: property.title,
+    slug: property.slug,
+    code: property.code,
+    type: property.type,
+    purpose: property.purpose,
+    status: property.status,
+    price: property.price,
+    city: property.city,
+    neighborhood: property.neighborhood,
+    address: property.address,
+    bedrooms: property.bedrooms,
+    bathrooms: property.bathrooms,
+    suites: property.suites,
+    parking: property.parking,
+    area: property.area,
+    description: property.description,
+    amenities: property.amenities,
+    image: property.image,
+    images: property.images,
+    featured: property.featured,
+    furnished: property.furnished,
+    pets: property.pets,
+    published: property.published,
+    views: property.views,
+    seo_title: property.seoTitle,
+    seo_description: property.seoDescription,
+    video_url: property.videoUrl,
+    virtual_tour_url: property.virtualTourUrl,
+  };
+}
+
+async function seedIfEmpty() {
+  const supabase = getSupabaseAdmin();
+  const { count, error } = await supabase.from("properties").select("id", { count: "exact", head: true });
+  if (error) throw error;
+  if (count === 0) {
+    const rows = demoProperties.map((property) => propertyToRow(property));
+    const { error: seedError } = await supabase.from("properties").upsert(rows, { onConflict: "code", ignoreDuplicates: true });
+    if (seedError) throw seedError;
   }
 }
 
 export async function listProperties(includeDrafts = false) {
+  if (!isSupabaseConfigured()) return demoProperties;
   await seedIfEmpty();
-  const db = getDb();
-  const rows = includeDrafts
-    ? await db.select().from(properties).orderBy(desc(properties.featured), desc(properties.createdAt))
-    : await db.select().from(properties).where(eq(properties.published, true)).orderBy(desc(properties.featured), desc(properties.createdAt));
-  return rows.map((row) => normalizeProperty(row));
+  let query = getSupabaseAdmin().from("properties").select("*")
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (!includeDrafts) query = query.eq("published", true);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map((row) => normalizeProperty(row));
 }
 
 export async function getPropertyBySlug(slug: string) {
+  if (!isSupabaseConfigured()) return demoProperties.find((property) => property.slug === slug) || null;
   await seedIfEmpty();
-  const [row] = await getDb().select().from(properties).where(eq(properties.slug, slug)).limit(1);
-  return row ? normalizeProperty(row) : null;
+  const { data, error } = await getSupabaseAdmin().from("properties").select("*").eq("slug", slug).eq("published", true).maybeSingle();
+  if (error) throw error;
+  return data ? normalizeProperty(data) : null;
 }
 
 export async function getSimilarProperties(current: Property) {
   const all = await listProperties(false);
-  return all.filter((p) => p.id !== current.id && (p.purpose === current.purpose || p.neighborhood === current.neighborhood)).sort((a, b) => Math.abs(a.price - current.price) - Math.abs(b.price - current.price)).slice(0, 3);
+  return all
+    .filter((property) => property.id !== current.id && (property.purpose === current.purpose || property.neighborhood === current.neighborhood))
+    .sort((a, b) => Math.abs(a.price - current.price) - Math.abs(b.price - current.price))
+    .slice(0, 3);
+}
+
+export async function writeAuditLog(actor: string, action: string, entityId: string, details: string) {
+  const { error } = await getSupabaseAdmin().from("audit_logs").insert({
+    actor, action, entity_type: "property", entity_id: entityId, details,
+  });
+  if (error) console.error("Could not write audit log", error.message);
 }

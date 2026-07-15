@@ -1,38 +1,48 @@
 # Imobiliária da Lucia
 
-Site imobiliário completo para Toronto, com catálogo público, filtros, páginas de detalhes, formulários de interesse, WhatsApp e painel administrativo protegido.
+Site imobiliário responsivo para Toronto, com catálogo público, pesquisa, formulários, WhatsApp e painel administrativo. Esta versão usa Next.js nativo na Vercel e Supabase para banco de dados, autenticação e fotos.
 
 ## Recursos
 
-- Catálogo responsivo com compra, aluguel e temporada
-- Filtros por localização, tipo, preço, quartos, banheiros, vagas, área e comodidades
-- Galeria, mapa aproximado, imóveis semelhantes e WhatsApp com mensagem automática
-- Leads persistidos e gerenciados por status
-- Painel protegido por login com permissões por e-mail
-- Cadastro, edição, duplicação, publicação, desativação, venda, aluguel, destaque e exclusão
-- Upload múltiplo seguro para R2
-- Histórico de alterações, validação e consultas preparadas via Drizzle/D1
-- SEO, Open Graph, sitemap, robots e dados acessíveis
+- Imóveis para compra, aluguel e temporada com filtros avançados
+- Página de detalhes, galeria, imóveis semelhantes e WhatsApp
+- Formulários de interesse persistidos como leads
+- Login administrativo por e-mail e senha, com recuperação de senha
+- Cadastro, edição, duplicação, publicação, destaque, venda, aluguel e exclusão
+- Upload múltiplo de imagens para Supabase Storage
+- Histórico de alterações e autorização administrativa revalidada no servidor
+- SEO, Open Graph, sitemap, acessibilidade e layout responsivo
 
-## Instalação local
+## Configurar o Supabase
 
-1. Use Node.js 22.13 ou superior.
-2. Instale as dependências com `npm install`.
-3. Copie `.env.example` para `.env.local` e defina `ADMIN_EMAILS`.
-4. Gere as migrações com `npm run db:generate`.
-5. Aplique a migração local com `npx wrangler d1 migrations apply site-creator-d1 --local`.
-6. Inicie o projeto com a variável `WRANGLER_LOG_PATH=.wrangler/wrangler.log` e `vinext dev` (PowerShell: `$env:WRANGLER_LOG_PATH='.wrangler/wrangler.log'; npx vinext dev`).
+1. Crie um projeto em [Supabase](https://supabase.com/).
+2. Abra **SQL Editor**, cole o conteúdo de `supabase/schema.sql` e execute.
+3. Em **Authentication > Users**, crie o usuário administrador com e-mail e senha.
+4. Copie `.env.example` para `.env.local`.
+5. Em **Project Settings > API**, copie a URL, a chave anônima e a chave `service_role` para as variáveis correspondentes.
+6. Defina `ADMIN_EMAILS` com o mesmo e-mail criado no Authentication. Vários e-mails podem ser separados por vírgula.
 
-O ambiente local permite o administrador de demonstração `admin@imobiliariadalucia.ca`. Em produção, `/admin` exige login com ChatGPT e o e-mail deve estar em `ADMIN_EMAILS`.
+Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no navegador ou em um repositório público.
 
-## Dados e armazenamento
+## Executar localmente
 
-O primeiro acesso à API popula seis imóveis de demonstração em Toronto. Imóveis, leads e auditoria ficam no Cloudflare D1; imagens ficam no Cloudflare R2. As ligações lógicas `DB` e `IMAGES` estão em `.openai/hosting.json` e os recursos reais são gerenciados pelo Sites.
+```bash
+npm install
+npm run dev
+```
 
-## Segurança
+Abra `http://localhost:3000`. Se o Supabase ainda não estiver configurado, o catálogo usa os seis imóveis de demonstração; o painel administrativo informa quais variáveis estão faltando.
 
-Autenticação é delegada ao fluxo seguro do Sites/ChatGPT. A autorização é revalidada no servidor em toda ação administrativa. O sistema usa ORM e statements parametrizados, valida tamanho e MIME de uploads, limita quantidade de arquivos e não renderiza HTML fornecido por usuários. Sessões e CSRF são tratados pelo dispatcher da plataforma.
+## Publicar na Vercel
 
-## Produção
+1. Importe o repositório do GitHub na Vercel.
+2. Mantenha o framework **Next.js** e não configure manualmente um Output Directory.
+3. Em **Settings > Environment Variables**, adicione:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SITE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `ADMIN_EMAILS`
+4. Faça um novo deployment.
 
-Configure `ADMIN_EMAILS` no ambiente do Sites. O D1 e o R2 são provisionados e conectados automaticamente durante a publicação.
+O primeiro acesso com o Supabase configurado inclui automaticamente os seis imóveis de demonstração caso a tabela esteja vazia.

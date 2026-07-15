@@ -1,35 +1,30 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "../../../../db";
-import { auditLogs, properties } from "../../../../db/schema";
 import { requireAdminApi } from "../../../../lib/admin-auth";
-import { ensureDatabase } from "../../../../lib/database";
+import { parsePropertyInput } from "../../../../lib/property-input";
+import { normalizeProperty, propertyToRow, writeAuditLog } from "../../../../lib/properties-db";
+import { getSupabaseAdmin } from "../../../../lib/supabase";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi(request);
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  await ensureDatabase();
   const { id } = await params;
   const body = await request.json() as Record<string, unknown>;
-  const allowed = ["title","code","slug","type","purpose","status","price","city","neighborhood","address","bedrooms","bathrooms","suites","parking","area","description","image","featured","furnished","pets","published","seoTitle","seoDescription","videoUrl","virtualTourUrl"];
-  const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
-  for (const key of allowed) if (key in body) update[key] = body[key];
-  if ("amenities" in body) update.amenities = JSON.stringify(body.amenities || []);
-  if ("images" in body) update.images = JSON.stringify(body.images || []);
-  const db = getDb();
-  const [property] = await db.update(properties).set(update).where(eq(properties.id, Number(id))).returning();
-  if (!property) return Response.json({ error: "Property not found" }, { status: 404 });
-  await db.insert(auditLogs).values({ actor: admin.email, action: "EDIT", entityType: "property", entityId: id, details: property.title });
+  const values = propertyToRow(parsePropertyInput(body, true));
+  const update = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+  const { data, error } = await getSupabaseAdmin().from("properties").update({ ...update, updated_at: new Date().toISOString() }).eq("id", Number(id)).select("*").maybeSingle();
+  if (error) return Response.json({ error: error.message }, { status: 400 });
+  if (!data) return Response.json({ error: "Property not found" }, { status: 404 });
+  const property = normalizeProperty(data);
+  await writeAuditLog(admin.email, "EDIT", id, property.title);
   return Response.json({ property });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdminApi();
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await requireAdminApi(request);
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  await ensureDatabase();
   const { id } = await params;
-  const db = getDb();
-  const [deleted] = await db.delete(properties).where(eq(properties.id, Number(id))).returning();
-  if (!deleted) return Response.json({ error: "Property not found" }, { status: 404 });
-  await db.insert(auditLogs).values({ actor: admin.email, action: "DELETE", entityType: "property", entityId: id, details: deleted.title });
+  const { data, error } = await getSupabaseAdmin().from("properties").delete().eq("id", Number(id)).select("*").maybeSingle();
+  if (error) return Response.json({ error: error.message }, { status: 400 });
+  if (!data) return Response.json({ error: "Property not found" }, { status: 404 });
+  await writeAuditLog(admin.email, "DELETE", id, String(data.title || ""));
   return Response.json({ ok: true });
 }

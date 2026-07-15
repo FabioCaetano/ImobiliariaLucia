@@ -1,25 +1,18 @@
-import { redirect } from "next/navigation";
-import { getChatGPTUser } from "../app/chatgpt-auth";
+import { allowedAdminEmails, getSupabaseAdmin } from "./supabase";
 
-export async function getAdminUser() {
-  const user = await getChatGPTUser();
-  if (!user && process.env.NODE_ENV === "development") {
-    return { email: "admin@imobiliariadalucia.ca", displayName: "Lucia Admin", fullName: "Lucia Admin" };
-  }
-  if (!user) return null;
-  const allowed = (process.env.ADMIN_EMAILS || "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
-  if (allowed.length && !allowed.includes(user.email.toLowerCase())) return null;
-  return user;
-}
+export type AdminUser = { email: string; displayName: string };
 
-export async function requireAdmin() {
-  const user = await getAdminUser();
-  if (!user) redirect("/signin-with-chatgpt?return_to=%2Fadmin");
-  return user;
-}
-
-export async function requireAdminApi() {
-  const user = await getAdminUser();
-  if (!user) return null;
-  return user;
+export async function requireAdminApi(request: Request): Promise<AdminUser | null> {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data, error } = await getSupabaseAdmin().auth.getUser(token);
+  if (error || !data.user?.email) return null;
+  const email = data.user.email.toLowerCase();
+  const allowed = allowedAdminEmails();
+  if (!allowed.length || !allowed.includes(email)) return null;
+  const metadata = data.user.user_metadata as Record<string, unknown>;
+  return {
+    email,
+    displayName: String(metadata.full_name || metadata.name || data.user.email),
+  };
 }
