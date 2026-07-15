@@ -15,7 +15,31 @@ export function normalizeProperty(row: Record<string, unknown>): Property {
   const parse = (value: unknown) => {
     try { return JSON.parse(String(value || "[]")); } catch { return []; }
   };
-  return { ...row, amenities: parse(row.amenities), images: parse(row.images) } as Property;
+  const legacyValues: Record<string, string> = {
+    Compra: "Buy", Aluguel: "Rent", Temporada: "Seasonal",
+    Casa: "House", Apartamento: "Apartment", Comercial: "Commercial",
+    "Disponível": "Available", Novo: "New", "Indisponível": "Unavailable", Vendido: "Sold", Alugado: "Rented",
+    "Ar-condicionado": "Air conditioning", Lareira: "Fireplace", Jardim: "Garden", Lavanderia: "Laundry",
+    Varanda: "Balcony", Piscina: "Pool", Academia: "Gym", Elevador: "Elevator", Portaria: "Concierge",
+    "Terraço": "Terrace", "Aceita animais": "Pet-friendly",
+  };
+  const demo = demoProperties.find((property) => property.code === String(row.code));
+  const legacyTitles = new Set([
+    "Casa contemporânea em High Park", "Condo com vista para o lago em Harbourfront",
+    "Loft autêntico no Distillery District", "Townhouse familiar em Leslieville",
+    "Apartamento elegante em Yorkville", "Casa ensolarada em The Beaches",
+  ]);
+  const title = String(row.title || "");
+  return {
+    ...row,
+    title: demo && legacyTitles.has(title) ? demo.title : title,
+    description: demo && legacyTitles.has(title) ? demo.description : String(row.description || ""),
+    purpose: legacyValues[String(row.purpose)] || String(row.purpose || ""),
+    type: legacyValues[String(row.type)] || String(row.type || ""),
+    status: legacyValues[String(row.status)] || String(row.status || ""),
+    amenities: (parse(row.amenities) as unknown[]).map((item) => legacyValues[String(item)] || String(item)),
+    images: parse(row.images),
+  } as Property;
 }
 
 export async function seedIfEmpty() {

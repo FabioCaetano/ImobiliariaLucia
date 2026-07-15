@@ -6,7 +6,7 @@ import { ensureDatabase } from "../../../../lib/database";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
-  if (!admin) return Response.json({ error: "Não autorizado" }, { status: 401 });
+  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   await ensureDatabase();
   const { id } = await params;
   const body = await request.json() as Record<string, unknown>;
@@ -17,19 +17,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if ("images" in body) update.images = JSON.stringify(body.images || []);
   const db = getDb();
   const [property] = await db.update(properties).set(update).where(eq(properties.id, Number(id))).returning();
-  if (!property) return Response.json({ error: "Imóvel não encontrado" }, { status: 404 });
-  await db.insert(auditLogs).values({ actor: admin.email, action: "EDITAR", entityType: "property", entityId: id, details: property.title });
+  if (!property) return Response.json({ error: "Property not found" }, { status: 404 });
+  await db.insert(auditLogs).values({ actor: admin.email, action: "EDIT", entityType: "property", entityId: id, details: property.title });
   return Response.json({ property });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
-  if (!admin) return Response.json({ error: "Não autorizado" }, { status: 401 });
+  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   await ensureDatabase();
   const { id } = await params;
   const db = getDb();
   const [deleted] = await db.delete(properties).where(eq(properties.id, Number(id))).returning();
-  if (!deleted) return Response.json({ error: "Imóvel não encontrado" }, { status: 404 });
-  await db.insert(auditLogs).values({ actor: admin.email, action: "EXCLUIR", entityType: "property", entityId: id, details: deleted.title });
+  if (!deleted) return Response.json({ error: "Property not found" }, { status: 404 });
+  await db.insert(auditLogs).values({ actor: admin.email, action: "DELETE", entityType: "property", entityId: id, details: deleted.title });
   return Response.json({ ok: true });
 }

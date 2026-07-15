@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const wantsAdmin = url.searchParams.get("admin") === "1";
-    if (wantsAdmin && !(await requireAdminApi())) return Response.json({ error: "Não autorizado" }, { status: 401 });
+    if (wantsAdmin && !(await requireAdminApi())) return Response.json({ error: "Unauthorized" }, { status: 401 });
     let rows = await listProperties(wantsAdmin);
     const q = clean(url.searchParams.get("q")).toLowerCase();
     const purpose = clean(url.searchParams.get("purpose"));
@@ -29,23 +29,23 @@ export async function GET(request: Request) {
     if (bedrooms) rows = rows.filter((p) => p.bedrooms >= bedrooms);
     return Response.json({ properties: rows });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Falha ao carregar imóveis" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Failed to load properties" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   const admin = await requireAdminApi();
-  if (!admin) return Response.json({ error: "Não autorizado" }, { status: 401 });
+  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await ensureDatabase();
     const body = await request.json() as Record<string, unknown>;
     const title = clean(body.title);
     const code = clean(body.code);
-    if (!title || !code || !body.price) return Response.json({ error: "Título, código e preço são obrigatórios" }, { status: 400 });
+    if (!title || !code || !body.price) return Response.json({ error: "Title, code and price are required" }, { status: 400 });
     const slug = clean(body.slug) || `${slugify(title)}-${Date.now().toString().slice(-5)}`;
     const values = {
-      title, code, slug, type: clean(body.type) || "Casa", purpose: clean(body.purpose) || "Compra",
-      status: clean(body.status) || "Disponível", price: Number(body.price), city: clean(body.city) || "Toronto",
+      title, code, slug, type: clean(body.type) || "House", purpose: clean(body.purpose) || "Buy",
+      status: clean(body.status) || "Available", price: Number(body.price), city: clean(body.city) || "Toronto",
       neighborhood: clean(body.neighborhood), address: clean(body.address), bedrooms: Number(body.bedrooms || 0),
       bathrooms: Number(body.bathrooms || 0), suites: Number(body.suites || 0), parking: Number(body.parking || 0),
       area: Number(body.area || 0), description: clean(body.description), amenities: JSON.stringify(body.amenities || []),
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
     };
     const db = getDb();
     const [created] = await db.insert(properties).values(values).returning();
-    await db.insert(auditLogs).values({ actor: admin.email, action: "CRIAR", entityType: "property", entityId: String(created.id), details: title });
+    await db.insert(auditLogs).values({ actor: admin.email, action: "CREATE", entityType: "property", entityId: String(created.id), details: title });
     return Response.json({ property: created }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao criar imóvel";
-    return Response.json({ error: message.includes("UNIQUE") ? "Código ou URL já existe" : message }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Failed to create property";
+    return Response.json({ error: message.includes("UNIQUE") ? "Code or URL already exists" : message }, { status: 400 });
   }
 }
