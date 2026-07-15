@@ -1,0 +1,3 @@
+"use client";
+import { useState } from "react";
+export function Gallery({images,title}:{images:string[];title:string}){const[open,setOpen]=useState<string|null>(null);return <><div className="detail-gallery">{images.slice(0,3).map((img,i)=><button key={img} onClick={()=>setOpen(img)} aria-label={`Ampliar foto ${i+1}`}><img src={img} alt={`${title} - foto ${i+1}`}/></button>)}</div>{open&&<div className="admin-modal" onClick={()=>setOpen(null)} role="dialog" aria-modal="true"><button aria-label="Fechar" style={{position:"fixed",top:20,right:25,color:"white",fontSize:35,background:"transparent",border:0}}>×</button><img src={open} alt={title} style={{maxHeight:"88vh",maxWidth:"92vw",objectFit:"contain"}}/></div>}</>}
