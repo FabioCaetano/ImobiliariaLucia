@@ -38,7 +38,7 @@ export function normalizeProperty(row: PropertyRow): Property {
   };
 }
 
-export function propertyToRow(property: Partial<Property>) {
+export function propertyToRow(property: Partial<Property>, withDefaults = false) {
   return {
     title: property.title,
     slug: property.slug,
@@ -56,18 +56,18 @@ export function propertyToRow(property: Partial<Property>) {
     parking: property.parking,
     area: property.area,
     description: property.description,
-    amenities: property.amenities,
-    image: property.image,
-    images: property.images,
-    featured: property.featured,
-    furnished: property.furnished,
-    pets: property.pets,
-    published: property.published,
-    views: property.views,
-    seo_title: property.seoTitle,
-    seo_description: property.seoDescription,
-    video_url: property.videoUrl,
-    virtual_tour_url: property.virtualTourUrl,
+    amenities: withDefaults ? property.amenities ?? [] : property.amenities,
+    image: withDefaults ? property.image ?? "" : property.image,
+    images: withDefaults ? property.images ?? [] : property.images,
+    featured: withDefaults ? property.featured ?? false : property.featured,
+    furnished: withDefaults ? property.furnished ?? false : property.furnished,
+    pets: withDefaults ? property.pets ?? false : property.pets,
+    published: withDefaults ? property.published ?? false : property.published,
+    views: withDefaults ? property.views ?? 0 : property.views,
+    seo_title: withDefaults ? property.seoTitle ?? "" : property.seoTitle,
+    seo_description: withDefaults ? property.seoDescription ?? "" : property.seoDescription,
+    video_url: withDefaults ? property.videoUrl ?? "" : property.videoUrl,
+    virtual_tour_url: withDefaults ? property.virtualTourUrl ?? "" : property.virtualTourUrl,
   };
 }
 
@@ -76,7 +76,7 @@ async function seedIfEmpty() {
   const { count, error } = await supabase.from("properties").select("id", { count: "exact", head: true });
   if (error) throw error;
   if (count === 0) {
-    const rows = demoProperties.map((property) => propertyToRow(property));
+    const rows = demoProperties.map((property) => propertyToRow(property, true));
     const { error: seedError } = await supabase.from("properties").upsert(rows, { onConflict: "code", ignoreDuplicates: true });
     if (seedError) throw seedError;
   }
@@ -84,22 +84,22 @@ async function seedIfEmpty() {
 
 export async function listProperties(includeDrafts = false) {
   if (!isSupabaseConfigured()) return demoProperties;
-  await seedIfEmpty();
+  if (includeDrafts) await seedIfEmpty();
   let query = getSupabaseAdmin().from("properties").select("*")
     .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
   if (!includeDrafts) query = query.eq("published", true);
   const { data, error } = await query;
   if (error) throw error;
+  if (!data?.length && !includeDrafts) return demoProperties;
   return (data || []).map((row) => normalizeProperty(row));
 }
 
 export async function getPropertyBySlug(slug: string) {
   if (!isSupabaseConfigured()) return demoProperties.find((property) => property.slug === slug) || null;
-  await seedIfEmpty();
   const { data, error } = await getSupabaseAdmin().from("properties").select("*").eq("slug", slug).eq("published", true).maybeSingle();
   if (error) throw error;
-  return data ? normalizeProperty(data) : null;
+  return data ? normalizeProperty(data) : demoProperties.find((property) => property.slug === slug) || null;
 }
 
 export async function getSimilarProperties(current: Property) {
